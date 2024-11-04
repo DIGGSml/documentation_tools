@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>UOM Types Viewer</title>
+    <title>Quantity Class Viewer</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -12,11 +12,23 @@
             max-width: 1200px;
             margin: 0 auto;
         }
+        .quantity-class-section {
+            background-color: white;
+            margin: 20px 0;
+            padding: 20px;
+            border-radius: 4px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .quantity-class-title {
+            margin: 0 0 15px 0;
+            color: #2c3e50;
+            font-size: 1.2em;
+        }
         table {
             width: 100%;
             border-collapse: collapse;
             background-color: white;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-top: 10px;
         }
         th, td {
             padding: 12px;
@@ -44,32 +56,87 @@
             background-color: #e8f5e9;
             border-radius: 4px;
         }
+        .upload-container {
+            margin: 20px 0;
+            padding: 20px;
+            background-color: white;
+            border-radius: 4px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .file-input-wrapper {
+            margin-bottom: 10px;
+        }
+        #dropZone {
+            border: 2px dashed #ccc;
+            border-radius: 4px;
+            padding: 20px;
+            text-align: center;
+            background-color: #fafafa;
+            cursor: pointer;
+            margin: 10px 0;
+        }
+        #dropZone.dragover {
+            background-color: #e1f5fe;
+            border-color: #2196F3;
+        }
+        .button {
+            padding: 8px 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .button:hover {
+            background-color: #45a049;
+        }
+        .error {
+            color: #f44336;
+            margin: 10px 0;
+        }
+        #loadingIndicator {
+            display: none;
+            margin: 10px 0;
+            color: #2196F3;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>UOM Types Viewer</h1>
+        <h1>Quantity Class Viewer</h1>
         
+        <div class="upload-container">
+            <h2>Upload XSD File</h2>
+            <div class="file-input-wrapper">
+                <input type="file" id="fileInput" accept=".xsd,application/xml" />
+            </div>
+            <div id="dropZone">
+                Or drag and drop your XSD file here
+            </div>
+            <div id="loadingIndicator">Processing file...</div>
+            <div id="errorMessage" class="error"></div>
+        </div>
+
         <div class="search-container">
             <input type="text" id="searchInput" placeholder="Search...">
-            <button onclick="filterTable()">Search</button>
+            <button class="button" onclick="filterTables()">Search</button>
         </div>
 
         <div class="stats" id="statsContainer"></div>
         
-        <table id="uomTable">
-            <thead>
-                <tr>
-                    <th>UOM Type Name</th>
-                    <th>Values</th>
-                </tr>
-            </thead>
-            <tbody id="tableBody">
-            </tbody>
-        </table>
+        <div id="tablesContainer"></div>
     </div>
 
     <script>
+        // Function to format the title (e.g., "MassPerEnergyUom" -> "Mass Per Energy")
+        function formatTitle(name) {
+            // Remove 'Uom' from the end
+            name = name.replace(/Uom$/, '');
+            
+            // Add space before capital letters and trim
+            return name.replace(/([A-Z])/g, ' $1').trim();
+        }
+
         // Function to parse the XML string
         function parseXMLString(xmlString) {
             const parser = new DOMParser();
@@ -90,47 +157,69 @@
                     for (let enum_ of enumerations) {
                         const value = enum_.getAttribute('value');
                         const documentation = enum_.getElementsByTagName('xs:documentation')[0]?.textContent || '';
-                        values.push({ value, documentation });
+                        values.push({ symbol: value, description: documentation });
                     }
 
                     uomTypes.push({
                         name: name,
+                        formattedName: formatTitle(name),
                         values: values
                     });
                 }
             }
 
-            return uomTypes;
+            // Sort the array alphabetically by formatted name
+            return uomTypes.sort((a, b) => a.formattedName.localeCompare(b.formattedName));
         }
 
-        // Function to populate table
-        function populateTable(uomTypes, filter = '') {
-            const tableBody = document.getElementById('tableBody');
-            tableBody.innerHTML = '';
+        // Function to create a table for a single quantity class
+        function createQuantityClassTable(quantityClass) {
+            const section = document.createElement('div');
+            section.className = 'quantity-class-section';
+            
+            const title = document.createElement('h3');
+            title.className = 'quantity-class-title';
+            title.textContent = quantityClass.formattedName;
+            section.appendChild(title);
+
+            const table = document.createElement('table');
+            table.innerHTML = `
+                <thead>
+                    <tr>
+                        <th>Symbol</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${quantityClass.values.map(value => `
+                        <tr>
+                            <td>${value.symbol}</td>
+                            <td>${value.description}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            `;
+
+            section.appendChild(table);
+            return section;
+        }
+
+        // Function to populate tables
+        function populateTables(uomTypes, filter = '') {
+            const container = document.getElementById('tablesContainer');
+            container.innerHTML = '';
 
             const filteredTypes = uomTypes.filter(type => 
-                type.name.toLowerCase().includes(filter.toLowerCase()) ||
+                type.formattedName.toLowerCase().includes(filter.toLowerCase()) ||
                 type.values.some(v => 
-                    v.value.toLowerCase().includes(filter.toLowerCase()) ||
-                    v.documentation.toLowerCase().includes(filter.toLowerCase())
+                    v.symbol.toLowerCase().includes(filter.toLowerCase()) ||
+                    v.description.toLowerCase().includes(filter.toLowerCase())
                 )
             );
 
             filteredTypes.forEach(type => {
-                const row = document.createElement('tr');
-                
-                const nameCell = document.createElement('td');
-                nameCell.textContent = type.name;
-                
-                const valuesCell = document.createElement('td');
-                const valuesList = type.values.map(v => 
-                    `${v.value}${v.documentation ? ` (${v.documentation})` : ''}`
-                ).join(', ');
-                valuesCell.textContent = valuesList;
-                
-                row.appendChild(nameCell);
-                row.appendChild(valuesCell);
-                tableBody.appendChild(row);
+                const tableSection = createQuantityClassTable(type);
+                container.appendChild(tableSection);
             });
 
             updateStats(filteredTypes);
@@ -145,29 +234,83 @@
             statsContainer.innerHTML = `
                 <strong>Statistics:</strong>
                 <br>
-                Total UOM Types: ${totalTypes}
+                Total Quantity Classes: ${totalTypes}
                 <br>
                 Total Values: ${totalValues}
             `;
         }
 
-        // Function to filter table
-        function filterTable() {
+        // Function to filter tables
+        function filterTables() {
             const searchInput = document.getElementById('searchInput');
-            populateTable(window.uomTypes, searchInput.value);
+            populateTables(window.uomTypes, searchInput.value);
         }
 
-        // Main execution
+        // Function to handle file processing
+        function processFile(file) {
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            const errorMessage = document.getElementById('errorMessage');
+            
+            loadingIndicator.style.display = 'block';
+            errorMessage.textContent = '';
+
+            const reader = new FileReader();
+            
+            reader.onload = function(e) {
+                try {
+                    const xmlDoc = parseXMLString(e.target.result);
+                    window.uomTypes = getUOMTypes(xmlDoc);
+                    populateTables(window.uomTypes);
+                    loadingIndicator.style.display = 'none';
+                } catch (error) {
+                    errorMessage.textContent = 'Error processing file: ' + error.message;
+                    loadingIndicator.style.display = 'none';
+                }
+            };
+
+            reader.onerror = function() {
+                errorMessage.textContent = 'Error reading file';
+                loadingIndicator.style.display = 'none';
+            };
+
+            reader.readAsText(file);
+        }
+
+        // Set up event listeners
         document.addEventListener('DOMContentLoaded', function() {
-            // Get XML content from the document
-            const xmlContent = document.querySelector('document_content').textContent;
-            const xmlDoc = parseXMLString(xmlContent);
+            const fileInput = document.getElementById('fileInput');
+            const dropZone = document.getElementById('dropZone');
             
-            // Parse and store UOM types
-            window.uomTypes = getUOMTypes(xmlDoc);
-            
-            // Initial population of table
-            populateTable(window.uomTypes);
+            fileInput.addEventListener('change', function(e) {
+                if (e.target.files.length > 0) {
+                    processFile(e.target.files[0]);
+                }
+            });
+
+            // Drag and drop handlers
+            dropZone.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                this.classList.add('dragover');
+            });
+
+            dropZone.addEventListener('dragleave', function(e) {
+                e.preventDefault();
+                this.classList.remove('dragover');
+            });
+
+            dropZone.addEventListener('drop', function(e) {
+                e.preventDefault();
+                this.classList.remove('dragover');
+                
+                if (e.dataTransfer.files.length > 0) {
+                    processFile(e.dataTransfer.files[0]);
+                }
+            });
+
+            // Click to upload
+            dropZone.addEventListener('click', function() {
+                fileInput.click();
+            });
         });
     </script>
 </body>
