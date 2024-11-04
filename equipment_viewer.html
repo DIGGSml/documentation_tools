@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DIGGS Equipment Analyzer</title>
+    <style>
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .loading {
+            margin: 20px;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <h1>DIGGS Equipment Analysis</h1>
+    <div id="loading" class="loading">Loading repository contents...</div>
+    <table id="resultsTable" style="display: none;">
+        <thead>
+            <tr>
+                <th>Equipment Name</th>
+                <th>XSD Source</th>
+                <th>Documentation</th>
+            </tr>
+        </thead>
+        <tbody id="resultsBody"></tbody>
+    </table>
+
+    <script>
+        async function fetchRepositoryContents() {
+            try {
+                const response = await fetch('https://api.github.com/repos/diggsml/schema-dev/contents/');
+                const data = await response.json();
+                return data.filter(file => file.name.endsWith('.xsd'));
+            } catch (error) {
+                console.error('Error fetching repository contents:', error);
+                document.getElementById('loading').textContent = 'Error loading repository contents';
+                return [];
+            }
+        }
+
+        async function fetchAndParseXSDFile(downloadUrl, sourceFile) {
+            try {
+                const response = await fetch(downloadUrl);
+                const xsdContent = await response.text();
+                const parser = new DOMParser();
+                const xmlDoc = parser.parseFromString(xsdContent, 'text/xml');
+                
+                // Find all elements with substitutionGroup="diggs:AbstractEquipment"
+                const elements = xmlDoc.getElementsByTagName('element');
+                const results = [];
+                
+                for (const element of elements) {
+                    const substitutionGroup = element.getAttribute('substitutionGroup');
+                    if (substitutionGroup === 'diggs:AbstractEquipment') {
+                        const name = element.getAttribute('name');
+                        const documentation = element.querySelector('documentation')?.textContent.trim() || '';
+                        
+                        results.push({
+                            name,
+                            source: sourceFile,
+                            documentation
+                        });
+                    }
+                }
+                
+                return results;
+            } catch (error) {
+                console.error(`Error processing ${downloadUrl}:`, error);
+                return [];
+            }
+        }
+
+        function updateTable(equipment) {
+            const tbody = document.getElementById('resultsBody');
+            equipment.forEach(item => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${item.name}</td>
+                    <td>${item.source}</td>
+                    <td>${item.documentation}</td>
+                `;
+                tbody.appendChild(row);
+            });
+            
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('resultsTable').style.display = 'table';
+        }
+
+        async function main() {
+            const xsdFiles = await fetchRepositoryContents();
+            const allEquipment = [];
+            
+            for (const file of xsdFiles) {
+                const equipment = await fetchAndParseXSDFile(file.download_url, file.name);
+                allEquipment.push(...equipment);
+            }
+            
+            updateTable(allEquipment);
+        }
+
+        // Start the analysis
+        main();
+    </script>
+</body>
+</html>
