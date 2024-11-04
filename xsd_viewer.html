@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>UOM Types Viewer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #4CAF50;
+            color: white;
+        }
+        tr:hover {
+            background-color: #f5f5f5;
+        }
+        .search-container {
+            margin: 20px 0;
+        }
+        #searchInput {
+            padding: 8px;
+            width: 200px;
+            margin-right: 10px;
+        }
+        .stats {
+            margin: 20px 0;
+            padding: 10px;
+            background-color: #e8f5e9;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>UOM Types Viewer</h1>
+        
+        <div class="search-container">
+            <input type="text" id="searchInput" placeholder="Search...">
+            <button onclick="filterTable()">Search</button>
+        </div>
+
+        <div class="stats" id="statsContainer"></div>
+        
+        <table id="uomTable">
+            <thead>
+                <tr>
+                    <th>UOM Type Name</th>
+                    <th>Values</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody">
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        // Function to parse the XML string
+        function parseXMLString(xmlString) {
+            const parser = new DOMParser();
+            return parser.parseFromString(xmlString, "text/xml");
+        }
+
+        // Function to get UOM types
+        function getUOMTypes(xmlDoc) {
+            const simpleTypes = xmlDoc.getElementsByTagName('xs:simpleType');
+            const uomTypes = [];
+
+            for (let type of simpleTypes) {
+                const name = type.getAttribute('name');
+                if (name.includes('Uom') && !name.endsWith('Ext')) {
+                    const values = [];
+                    const enumerations = type.getElementsByTagName('xs:enumeration');
+                    
+                    for (let enum_ of enumerations) {
+                        const value = enum_.getAttribute('value');
+                        const documentation = enum_.getElementsByTagName('xs:documentation')[0]?.textContent || '';
+                        values.push({ value, documentation });
+                    }
+
+                    uomTypes.push({
+                        name: name,
+                        values: values
+                    });
+                }
+            }
+
+            return uomTypes;
+        }
+
+        // Function to populate table
+        function populateTable(uomTypes, filter = '') {
+            const tableBody = document.getElementById('tableBody');
+            tableBody.innerHTML = '';
+
+            const filteredTypes = uomTypes.filter(type => 
+                type.name.toLowerCase().includes(filter.toLowerCase()) ||
+                type.values.some(v => 
+                    v.value.toLowerCase().includes(filter.toLowerCase()) ||
+                    v.documentation.toLowerCase().includes(filter.toLowerCase())
+                )
+            );
+
+            filteredTypes.forEach(type => {
+                const row = document.createElement('tr');
+                
+                const nameCell = document.createElement('td');
+                nameCell.textContent = type.name;
+                
+                const valuesCell = document.createElement('td');
+                const valuesList = type.values.map(v => 
+                    `${v.value}${v.documentation ? ` (${v.documentation})` : ''}`
+                ).join(', ');
+                valuesCell.textContent = valuesList;
+                
+                row.appendChild(nameCell);
+                row.appendChild(valuesCell);
+                tableBody.appendChild(row);
+            });
+
+            updateStats(filteredTypes);
+        }
+
+        // Function to update statistics
+        function updateStats(types) {
+            const statsContainer = document.getElementById('statsContainer');
+            const totalTypes = types.length;
+            const totalValues = types.reduce((sum, type) => sum + type.values.length, 0);
+            
+            statsContainer.innerHTML = `
+                <strong>Statistics:</strong>
+                <br>
+                Total UOM Types: ${totalTypes}
+                <br>
+                Total Values: ${totalValues}
+            `;
+        }
+
+        // Function to filter table
+        function filterTable() {
+            const searchInput = document.getElementById('searchInput');
+            populateTable(window.uomTypes, searchInput.value);
+        }
+
+        // Main execution
+        document.addEventListener('DOMContentLoaded', function() {
+            // Get XML content from the document
+            const xmlContent = document.querySelector('document_content').textContent;
+            const xmlDoc = parseXMLString(xmlContent);
+            
+            // Parse and store UOM types
+            window.uomTypes = getUOMTypes(xmlDoc);
+            
+            // Initial population of table
+            populateTable(window.uomTypes);
+        });
+    </script>
+</body>
+</html>
